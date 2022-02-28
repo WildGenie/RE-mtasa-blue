@@ -290,13 +290,13 @@ class _BaseFile(list):
         """
         Returns the unicode representation of the file.
         """
-        ret = []
         entries = [self.metadata_as_entry()] + \
                   [e for e in self if not e.obsolete]
-        for entry in entries:
-            ret.append(entry.__unicode__(self.wrapwidth))
-        for entry in self.obsolete_entries():
-            ret.append(entry.__unicode__(self.wrapwidth))
+        ret = [entry.__unicode__(self.wrapwidth) for entry in entries]
+        ret.extend(
+            entry.__unicode__(self.wrapwidth) for entry in self.obsolete_entries()
+        )
+
         ret = u('\n').join(ret)
 
         assert isinstance(ret, text_type)
@@ -371,12 +371,8 @@ class _BaseFile(list):
         Returns the file metadata as a :class:`~polib.POFile` instance.
         """
         e = POEntry(msgid='')
-        mdata = self.ordered_metadata()
-        if mdata:
-            strs = []
-            for name, value in mdata:
-                # Strip whitespace off each line in a multi-line entry
-                strs.append('%s: %s' % (name, value))
+        if mdata := self.ordered_metadata():
+            strs = ['%s: %s' % (name, value) for name, value in mdata]
             e.msgstr = '\n'.join(strs) + '\n'
         if self.metadata_is_fuzzy:
             e.flags.append('fuzzy')
@@ -438,12 +434,15 @@ class _BaseFile(list):
             entries = self[:]
         else:
             entries = [e for e in self if not e.obsolete]
-        for e in entries:
-            if getattr(e, by) == st:
-                if msgctxt is not False and e.msgctxt != msgctxt:
-                    continue
-                return e
-        return None
+        return next(
+            (
+                e
+                for e in entries
+                if getattr(e, by) == st
+                and (msgctxt is False or e.msgctxt == msgctxt)
+            ),
+            None,
+        )
 
     def ordered_metadata(self):
         """
@@ -591,11 +590,7 @@ class POFile(_BaseFile):
         """
         ret, headers = '', self.header.split('\n')
         for header in headers:
-            if header[:1] in [',', ':']:
-                ret += '#%s\n' % header
-            else:
-                ret += '# %s\n' % header
-
+            ret += '#%s\n' % header if header[:1] in [',', ':'] else '# %s\n' % header
         if not isinstance(ret, text_type):
             ret = ret.decode(self.encoding)
 
@@ -633,8 +628,11 @@ class POFile(_BaseFile):
         """
         Convenience method that returns the list of untranslated entries.
         """
-        return [e for e in self if not e.translated() and not e.obsolete
-                and not 'fuzzy' in e.flags]
+        return [
+            e
+            for e in self
+            if not e.translated() and not e.obsolete and 'fuzzy' not in e.flags
+        ]
 
     def fuzzy_entries(self):
         """
@@ -665,8 +663,8 @@ class POFile(_BaseFile):
             object POFile, the reference catalog.
         """
         # Store entries in dict/set for faster access
-        self_entries = dict((entry.msgid, entry) for entry in self)
-        refpot_msgids = set(entry.msgid for entry in refpot)
+        self_entries = {entry.msgid: entry for entry in self}
+        refpot_msgids = {entry.msgid for entry in refpot}
         # Merge entries that are in the refpot
         for entry in refpot:
             e = self_entries.get(entry.msgid)
@@ -799,10 +797,7 @@ class _BaseEntry(object):
         """
         Returns the unicode representation of the entry.
         """
-        if self.obsolete:
-            delflag = '#~ '
-        else:
-            delflag = ''
+        delflag = '#~ ' if self.obsolete else ''
         ret = []
         # write the msgctxt if any
         if self.msgctxt is not None:
@@ -817,8 +812,7 @@ class _BaseEntry(object):
         if self.msgstr_plural:
             # write the msgstr_plural if any
             msgstrs = self.msgstr_plural
-            keys = list(msgstrs)
-            keys.sort()
+            keys = sorted(msgstrs)
             for index in keys:
                 msgstr = msgstrs[index]
                 plural_index = '[%s]' % index
@@ -852,9 +846,7 @@ class _BaseEntry(object):
             lines = [''] + lines  # start with initial empty line
         else:
             escaped_field = escape(field)
-            specialchars_count = 0
-            for c in ['\\', '\n', '\r', '\t', '"']:
-                specialchars_count += field.count(c)
+            specialchars_count = sum(field.count(c) for c in ['\\', '\n', '\r', '\t', '"'])
             # comparison must take into account fieldname length + one space
             # + 2 quotes (eg. msgid "<string>")
             flength = len(fieldname) + 3
@@ -877,9 +869,7 @@ class _BaseEntry(object):
 
         ret = ['%s%s%s "%s"' % (delflag, fieldname, plural_index,
                                 escape(lines.pop(0)))]
-        for mstr in lines:
-            #import pdb; pdb.set_trace()
-            ret.append('%s"%s"' % (delflag, escape(mstr)))
+        ret.extend('%s"%s"' % (delflag, escape(mstr)) for mstr in lines)
         return ret
 # }}}
 # class POEntry {{{
@@ -935,8 +925,7 @@ class POEntry(_BaseEntry):
         # comments first, if any (with text wrapping as xgettext does)
         comments = [('comment', '#. '), ('tcomment', '# ')]
         for c in comments:
-            val = getattr(self, c[0])
-            if val:
+            if val := getattr(self, c[0]):
                 for comment in val.split('\n'):
                     if wrapwidth > 0 and len(comment) + len(c[1]) > wrapwidth:
                         ret += wrap(
@@ -971,7 +960,7 @@ class POEntry(_BaseEntry):
                     break_long_words=False
                 )]
             else:
-                ret.append('#: ' + filestr)
+                ret.append(f'#: {filestr}')
 
         # flags (TODO: wrapping ?)
         if self.flags:
@@ -981,8 +970,7 @@ class POEntry(_BaseEntry):
         fields = ['previous_msgctxt', 'previous_msgid',
                   'previous_msgid_plural']
         for f in fields:
-            val = getattr(self, f)
-            if val:
+            if val := getattr(self, f):
                 ret += self._str_field(f, "#| ", "", val, wrapwidth)
 
         ret.append(_BaseEntry.__unicode__(self, wrapwidth))
@@ -1000,30 +988,19 @@ class POEntry(_BaseEntry):
 
         # First: Obsolete test
         if self.obsolete != other.obsolete:
-            if self.obsolete:
-                return -1
-            else:
-                return 1
+            return -1 if self.obsolete else 1
         # Work on a copy to protect original
         occ1 = sorted(self.occurrences[:])
         occ2 = sorted(other.occurrences[:])
-        pos = 0
-        for entry1 in occ1:
+        for pos, entry1 in enumerate(occ1):
             try:
                 entry2 = occ2[pos]
             except IndexError:
                 return 1
-            pos = pos + 1
             if entry1[0] != entry2[0]:
-                if entry1[0] > entry2[0]:
-                    return 1
-                else:
-                    return -1
+                return 1 if entry1[0] > entry2[0] else -1
             if entry1[1] != entry2[1]:
-                if entry1[1] > entry2[1]:
-                    return 1
-                else:
-                    return -1
+                return 1 if entry1[1] > entry2[1] else -1
         # Finally: Compare message ID
         if self.msgid > other.msgid:
             return 1
@@ -1059,10 +1036,7 @@ class POEntry(_BaseEntry):
         if self.msgstr != '':
             return True
         if self.msgstr_plural:
-            for pos in self.msgstr_plural:
-                if self.msgstr_plural[pos] == '':
-                    return False
-            return True
+            return all(self.msgstr_plural[pos] != '' for pos in self.msgstr_plural)
         return False
 
     def merge(self, other):
@@ -1318,10 +1292,7 @@ class _POFileParser(object):
             # since entries are added when another entry is found, we must add
             # the last entry here (only if there are lines)
             self.instance.append(self.current_entry)
-        # before returning the instance, check if there's metadata and if
-        # so extract it in a dict
-        metadataentry = self.instance.find('')
-        if metadataentry:  # metadata found
+        if metadataentry := self.instance.find(''):
             # remove the entry
             self.instance.remove(metadataentry)
             self.instance.metadata_is_fuzzy = metadataentry.flags
@@ -1577,14 +1548,10 @@ class _MOFileParser(object):
         msgids_hash_offset, msgstrs_hash_offset = self._readbinary(ii, 8)
         # move to msgid hash table and read length and offset of msgids
         self.fhandle.seek(msgids_hash_offset)
-        msgids_index = []
-        for i in range(numofstrings):
-            msgids_index.append(self._readbinary(ii, 8))
+        msgids_index = [self._readbinary(ii, 8) for _ in range(numofstrings)]
         # move to msgstr hash table and read length and offset of msgstrs
         self.fhandle.seek(msgstrs_hash_offset)
-        msgstrs_index = []
-        for i in range(numofstrings):
-            msgstrs_index.append(self._readbinary(ii, 8))
+        msgstrs_index = [self._readbinary(ii, 8) for _ in range(numofstrings)]
         # build entries
         encoding = self.instance.encoding
         for i in range(numofstrings):
@@ -1612,9 +1579,9 @@ class _MOFileParser(object):
                 entry = self._build_entry(
                     msgid=msgid_tokens[0],
                     msgid_plural=msgid_tokens[1],
-                    msgstr_plural=dict((k, v) for k, v in
-                                       enumerate(msgstr.split(b('\0'))))
+                    msgstr_plural=dict(enumerate(msgstr.split(b('\0')))),
                 )
+
             else:
                 entry = self._build_entry(msgid=msgid, msgstr=msgstr)
             self.instance.append(entry)
@@ -1696,11 +1663,7 @@ class TextWrapper(textwrap.TextWrapper):
             cur_len = 0
 
             # Figure out which static string will prefix this line.
-            if lines:
-                indent = self.subsequent_indent
-            else:
-                indent = self.initial_indent
-
+            indent = self.subsequent_indent if lines else self.initial_indent
             # Maximum width for this line.
             width = self.width - len(indent)
 
@@ -1712,14 +1675,11 @@ class TextWrapper(textwrap.TextWrapper):
             while chunks:
                 l = len(chunks[-1])
 
-                # Can at least squeeze this chunk onto the current line.
-                if cur_len + l <= width:
-                    cur_line.append(chunks.pop())
-                    cur_len += l
-
-                # Nope, this line is full.
-                else:
+                if cur_len + l > width:
                     break
+
+                cur_line.append(chunks.pop())
+                cur_len += l
 
             # The current line is full, and the next chunk is too big to
             # fit on *any* line (not just this one).

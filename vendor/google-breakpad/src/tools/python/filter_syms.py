@@ -90,8 +90,7 @@ class SymbolFileParser(object):
   def Process(self):
     """Processes the Breakpad symbol file."""
     for line in self.input_stream:
-      parsed = self._ParseRecord(line.rstrip())
-      if parsed:
+      if parsed := self._ParseRecord(line.rstrip()):
         self.output_stream.write(parsed + '\n')
 
   def _ParseRecord(self, record):
@@ -140,7 +139,7 @@ class SymbolFileParser(object):
     """Parses and corrects a FILE record."""
     file_info = file_record[5:].split(' ', 3)
     if len(file_info) > 2:
-      raise BreakpadParseError('Unsupported FILE record: ' + file_record)
+      raise BreakpadParseError(f'Unsupported FILE record: {file_record}')
     file_index = int(file_info[0])
     file_name = self._NormalizePath(file_info[1])
     existing_file_index = self.unique_files.get(file_name)
@@ -164,7 +163,7 @@ class SymbolFileParser(object):
     """Parses and corrects a Line record."""
     line_info = line_record.split(' ', 5)
     if len(line_info) > 4:
-      raise BreakpadParseError('Unsupported Line record: ' + line_record)
+      raise BreakpadParseError(f'Unsupported Line record: {line_record}')
     file_index = int(line_info[3])
     line_info[3] = str(self.duplicate_files.get(file_index, file_index))
     return ' '.join(line_info)

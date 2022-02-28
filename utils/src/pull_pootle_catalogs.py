@@ -36,12 +36,12 @@ def myurlopen(url,urltimeout):
 # urlopen with over complex handling of connection issues
 def myurlopenDeluxe(url,urltimeout,attempts):
     print ( "Trying '%s'"%(url) )
-    for x in range(0, attempts):
+    for _ in range(attempts):
         # Get file first
         content = myurlopen(url,urltimeout)
         if ( len(content) > 0 ):
             print ( "content size %d"%(len(content)) )
-            for y in range(0, attempts):
+            for _ in range(attempts):
                 # Get file second
                 content2 = myurlopen(url,urltimeout)
                 if ( len(content2) > 0 ):
@@ -110,7 +110,7 @@ if options.langindex > -1:
     langlist = [langlist[options.langindex]]
 
 # Loop over the list
-for lang in (langlist):
+for lang in langlist:
     # Let's create our full Pootle export URL depending on whether we're GNU or not
     url = ""
     alturl = ""
@@ -131,10 +131,9 @@ for lang in (langlist):
     path,tail = os.path.split(output)
     if ( not os.path.exists(path) ):
         os.makedirs(path)
-    
-    localFile = open(output, 'w')
-    localFile.write(content)
-    localFile.close()
+
+    with open(output, 'w') as localFile:
+        localFile.write(content)
     print ( "Read '%s' and written to '%s'"%(url,output) )
 
 

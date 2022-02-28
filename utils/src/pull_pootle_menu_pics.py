@@ -58,12 +58,6 @@ for lang in (options.languages).replace(" ","").split(","):
         alturl = urlparse.urljoin(options.url, "download/%s/%s/%s.po"%(lang,options.project,options.project))
         output = os.path.join(options.output,"%s/%s.po"%(lang,options.project))
 
-    # Show HTTP headers if required
-    if False:
-        print ( "Trying '%s'"%(url) )
-        opener = urllib2.build_opener(urllib2.HTTPHandler(debuglevel=1))
-        opener.open(url)
-
     # Get file twice and compare to defeat truncated downloads
     while True:
         # Read from alt url first (try to flush pootle cache)
@@ -81,10 +75,8 @@ for lang in (options.languages).replace(" ","").split(","):
         if ( not os.path.exists(path) ):
             os.makedirs(path)
 
-        localFile = open(output, 'wb')
-        localFile.write(content)
-        localFile.close()
-
+        with open(output, 'wb') as localFile:
+            localFile.write(content)
         u = urllib2.urlopen(req)
         if ( content == u.read() ):
             break
@@ -110,10 +102,8 @@ for lang in (options.languages).replace(" ","").split(","):
             if ( content[:1] == "<" ):
                 print ( "Content error with '%s'"%(url) )
             else:
-                # Save pic
-                localFile = open(output, 'wb')
-                localFile.write(content)
-                localFile.close()
+                with open(output, 'wb') as localFile:
+                    localFile.write(content)
                 print ( "Read '%s' and written to '%s'"%(url,output) )
         except urllib2.HTTPError as e:
             print ( "HTTPError %d '%s' '%s'"%(e.code,e.reason,url) )

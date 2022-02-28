@@ -29,46 +29,42 @@ ErrorCodes = {}
 for root,dirs,files in os.walk(options.dir):
         for file in files:
                 filename,ext = os.path.splitext(file)
-                if ext == ".c" or ext == ".cpp" or ext == ".h" or ext == ".hpp":
+                if ext in [".c", ".cpp", ".h", ".hpp"]:
                         filePath = os.path.abspath(os.path.join(root,file))
-                        #Parse the file looking for error codes
-                        openedFile = open(filePath,"r")
-                        lineNo = 0
-                        for line in openedFile:
-                                lineNo += 1  
-                                startScan = line.find('_E("')
-                                if startScan == -1:
-                                        continue
-                                # Check previous character is not alphanumerical
-                                if (startScan > 0 and re.match('^[\w-]+$',line[startScan-1:startScan]) != None ):
-                                        continue
+                        with open(filePath,"r") as openedFile:
+                                lineNo = 0
+                                for line in openedFile:
+                                        lineNo += 1  
+                                        startScan = line.find('_E("')
+                                        if startScan == -1:
+                                                continue
+                                        # Check previous character is not alphanumerical
+                                        if (startScan > 0 and re.match('^[\w-]+$',line[startScan-1:startScan]) != None ):
+                                                continue
 
-                                endScan = line.find('"',startScan+4)
-                                errorCode = line[startScan+4:endScan]
-                                # Find any other strings and compile for information
-                                newStartScan = line.find('"',0)
-                                finalIndex = 0
-                                information = []
-                                while newStartScan != -1:
-                                        newEndScan = line.find('"',newStartScan+1)
-                                        foundString = line[newStartScan+1:newEndScan]
-                                        if foundString != errorCode:
-                                                information.append(foundString)
+                                        endScan = line.find('"',startScan+4)
+                                        errorCode = line[startScan+4:endScan]
+                                        # Find any other strings and compile for information
+                                        newStartScan = line.find('"',0)
+                                        finalIndex = 0
+                                        information = []
+                                        while newStartScan != -1:
+                                                newEndScan = line.find('"',newStartScan+1)
+                                                foundString = line[newStartScan+1:newEndScan]
+                                                if foundString != errorCode:
+                                                        information.append(foundString)
 
-                                        newStartScan = line.find('"',newEndScan+1)
-                                        finalIndex = max([ finalIndex, newEndScan+1 ])
+                                                newStartScan = line.find('"',newEndScan+1)
+                                                finalIndex = max([ finalIndex, newEndScan+1 ])
 
-                                # Find any line comments and append
-                                newStartScan = line.rfind("//",finalIndex)
-                                if newStartScan != -1:
-                                        information.append(line[newStartScan+2:-1].lstrip())
-                                if errorCode in ErrorCodes:
-                                        print("WARNING: Error Code conflict: " + errorCode )
-                                        
-                                ErrorCodes[errorCode] = { "information" : information, "file" : os.path.relpath(filePath,options.dir), "line" : lineNo }
+                                        # Find any line comments and append
+                                        newStartScan = line.rfind("//",finalIndex)
+                                        if newStartScan != -1:
+                                                information.append(line[newStartScan+2:-1].lstrip())
+                                        if errorCode in ErrorCodes:
+                                                print("WARNING: Error Code conflict: " + errorCode )
 
-                        openedFile.close()
-
+                                        ErrorCodes[errorCode] = { "information" : information, "file" : os.path.relpath(filePath,options.dir), "line" : lineNo }
 
 #### Put into media wiki format
 wikicode = "<!-- Automatically generated with %s -->"%(os.path.relpath(sys.argv[0],options.dir)) + """
@@ -90,8 +86,6 @@ for code,data in sorted(ErrorCodes.items()):
 
 wikicode += "|}"
 
-outputFile = open(options.output,"w")
-outputFile.write(wikicode)
-outputFile.close()
-
+with open(options.output,"w") as outputFile:
+        outputFile.write(wikicode)
 print( "Operation complete, %i error codes found.  File written to '%s'."%(len(ErrorCodes),os.path.abspath(options.output)) )
